@@ -16,3 +16,7 @@ only for p2.5 or p6.25 panel using esp8266
 To connect your power supply up to the panel, you can connect the display power wire directly to a DC jack screw terminal breakout or use some larger screw terminals and some perfboard
 
 ![img](https://i.imgur.com/ulIn681.jpg)
+
+##Related repo
+
+https://github.com/toblum/esp_p10_tetris_clock
