@@ -1,7 +1,9 @@
 /*******************************************************************
     Tetris clock that fetches its time Using the EzTimeLibrary
 
-    For use with the ESP32 or TinyPICO
+    NOTE: THIS IS CURRENTLY CRASHING!
+
+    For use with an ESP8266
  *                                                                 *
     Written by Brian Lough
     YouTube: https://www.youtube.com/brianlough
@@ -13,26 +15,17 @@
 // Standard Libraries - Already Installed if you have ESP32 set up
 // ----------------------------
 
-#include <WiFi.h>
+#include <Ticker.h>
+#include <ESP8266WiFi.h>
 
 // ----------------------------
 // Additional Libraries - each one of these will need to be installed.
 // ----------------------------
 
-// Enabling this is meant to have a performance
-// improvement but its worse for me.
-// https://github.com/2dom/PxMatrix/pull/103
-//#define double_buffer
 
 #include <PxMatrix.h>
 // The library for controlling the LED Matrix
-// At time of writing this my changes for the TinyPICO
-// Have been merged into the main PxMatrix library,
-// but have not been released, so you will need to install
-// from Github
-//
-// If you are using a regular ESP32 you may be able to use
-// the library manager version
+// Can be installed from the library manager
 // https://github.com/2dom/PxMatrix
 
 // Adafruit GFX library is a dependancy for the PxMatrix Library
@@ -40,9 +33,7 @@
 // https://github.com/adafruit/Adafruit-GFX-Library
 
 #include <TetrisMatrixDraw.h>
-// This library draws out characters using a tetris block
-// amimation
-// Can be installed from the library manager
+// This library :)
 // https://github.com/toblum/TetrisAnimation
 
 #include <ezTime.h>
@@ -53,42 +44,39 @@
 // ---- Stuff to configure ----
 
 // Initialize Wifi connection to the router
-char ssid[] = "SSID";     // your network SSID (name)
-char password[] = "password"; // your network key
+char ssid[] = "DynamicOP";     // your network SSID (name)
+char password[] = "DynamicOP"; // your network key
 
 // Set a timezone using the following list
 // https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-#define MYTIMEZONE "Europe/Dublin"
+#define MYTIMEZONE "Asia/Shanghai"
 
 // Sets whether the clock should be 12 hour format or not.
-bool twelveHourFormat = true;
+bool twelveHourFormat = false;
 
 // If this is set to false, the number will only change if the value behind it changes
 // e.g. the digit representing the least significant minute will be replaced every minute,
 // but the most significant number will only be replaced every 10 minutes.
 // When true, all digits will be replaced every minute.
-bool forceRefresh = true;
+bool forceRefresh = false;
 // -----------------------------
 
 // ----- Wiring -------
-#define P_LAT 22
-#define P_A 19
-#define P_B 23
-#define P_C 18
-#define P_D 5
-#define P_E 15
-#define P_OE 26 //TinyPICO
-//#define P_OE 21 //Huzzah32
-//#define P_OE 2 // Generic ESP32
+#define P_LAT 16
+#define P_A 5
+#define P_B 4
+#define P_C 15
+#define P_OE 2
+#define P_D 12
+#define P_E 0
 // ---------------------
 
-portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-hw_timer_t * timer = NULL;
-hw_timer_t * animationTimer = NULL;
+Ticker display_ticker;
+Ticker timer_ticker;
 
-// PxMATRIX display(32,16,P_LAT, P_OE,P_A,P_B,P_C);
+ PxMATRIX display(32,16,P_LAT, P_OE,P_A,P_B,P_C);
 // PxMATRIX display(64,32,P_LAT, P_OE,P_A,P_B,P_C,P_D);
-PxMATRIX display(64, 32, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
+//PxMATRIX display(64, 32, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
 
 TetrisMatrixDraw tetris(display); // Main clock
 TetrisMatrixDraw tetris2(display); // The "M" of AM/PM
@@ -98,35 +86,29 @@ Timezone myTZ;
 unsigned long oneSecondLoopDue = 0;
 
 bool showColon = true;
-volatile bool finishedAnimating = false;
+bool finishedAnimating = false;
 bool displayIntro = true;
+bool animateFlag = false;
 
 String lastDisplayedTime = "";
 String lastDisplayedAmPm = "";
-
+unsigned long animLoop = 0;
 // This method is needed for driving the display
-void IRAM_ATTR display_updater() {
-  portENTER_CRITICAL_ISR(&timerMux);
-  display.display(10);
-  portEXIT_CRITICAL_ISR(&timerMux);
+void display_updater() {
+  display.display(1);
+}
+
+void setAnimateFlag() {
+  animateFlag = true;
 }
 
 // This method is for controlling the tetris library draw calls
 void animationHandler()
 {
-#ifndef double_buffer
-  portENTER_CRITICAL_ISR(&timerMux);
-#endif
-
   // Not clearing the display and redrawing it when you
   // dont need to improves how the refresh rate appears
   if (!finishedAnimating) {
-#ifdef double_buffer
-    display.fillScreen(tetris.tetrisBLACK);
-#else
     display.clearDisplay();
-#endif
-    //display.fillScreen(tetris.tetrisBLACK);
     if (displayIntro) {
       finishedAnimating = tetris.drawText(1, 21);
     } else {
@@ -137,55 +119,22 @@ void animationHandler()
         bool tetris2Done = false;
         bool tetris3Done = false;
 
-        tetris1Done = tetris.drawNumbers(-6, 26, showColon);
-        tetris2Done = tetris2.drawText(56, 25);
+        tetris1Done = tetris.drawNumbers(-3, 13, showColon);
+        tetris2Done = tetris2.drawText(28, 13);
 
         // Only draw the top letter once the bottom letter is finished.
         if (tetris2Done) {
-          tetris3Done = tetris3.drawText(56, 15);
+          tetris3Done = tetris3.drawText(28, 13);
         }
 
         finishedAnimating = tetris1Done && tetris2Done && tetris3Done;
 
       } else {
-        finishedAnimating = tetris.drawNumbers(2, 26, showColon);
+        finishedAnimating = tetris.drawNumbers(1, 10, showColon);
       }
     }
-#ifdef double_buffer
-    display.showBuffer();
-#endif
+
   }
-#ifndef double_buffer
-  portEXIT_CRITICAL_ISR(&timerMux);
-#endif
-}
-
-void drawIntro(int x = 0, int y = 0)
-{
-  tetris.drawChar("P", x, y, tetris.tetrisCYAN);
-  tetris.drawChar("o", x + 5, y, tetris.tetrisMAGENTA);
-  tetris.drawChar("w", x + 11, y, tetris.tetrisYELLOW);
-  tetris.drawChar("e", x + 17, y, tetris.tetrisGREEN);
-  tetris.drawChar("r", x + 22, y, tetris.tetrisBLUE);
-  tetris.drawChar("e", x + 27, y, tetris.tetrisRED);
-  tetris.drawChar("d", x + 32, y, tetris.tetrisWHITE);
-  tetris.drawChar(" ", x + 37, y, tetris.tetrisMAGENTA);
-  tetris.drawChar("b", x + 42, y, tetris.tetrisYELLOW);
-  tetris.drawChar("y", x + 47, y, tetris.tetrisGREEN);
-}
-
-void drawConnecting(int x = 0, int y = 0)
-{
-  tetris.drawChar("C", x, y, tetris.tetrisCYAN);
-  tetris.drawChar("o", x + 5, y, tetris.tetrisMAGENTA);
-  tetris.drawChar("n", x + 11, y, tetris.tetrisYELLOW);
-  tetris.drawChar("n", x + 17, y, tetris.tetrisGREEN);
-  tetris.drawChar("e", x + 22, y, tetris.tetrisBLUE);
-  tetris.drawChar("c", x + 27, y, tetris.tetrisRED);
-  tetris.drawChar("t", x + 32, y, tetris.tetrisWHITE);
-  tetris.drawChar("i", x + 37, y, tetris.tetrisMAGENTA);
-  tetris.drawChar("n", x + 42, y, tetris.tetrisYELLOW);
-  tetris.drawChar("g", x + 47, y, tetris.tetrisGREEN);
 }
 
 void setup() {
@@ -214,27 +163,14 @@ void setup() {
   // as it will crash!
 
   // Intialise display library
-  display.begin(16, SPI_BUS_CLK, 27, SPI_BUS_MISO, SPI_BUS_SS); // TinyPICO
-  //display.begin(16); // Generic ESP32 including Huzzah
-  display.flushDisplay();
-
-  // Setup timer for driving display
-  timer = timerBegin(0, 80, true);
-  timerAttachInterrupt(timer, &display_updater, true);
-  timerAlarmWrite(timer, 2000, true);
-  timerAlarmEnable(timer);
-  yield();
-#ifdef double_buffer
-  display.fillScreen(tetris.tetrisBLACK);
-#else
+  display.begin(4);
+  display.setScanPattern(ZAGGIZ);
   display.clearDisplay();
-#endif
 
-  // "connecting"
-  drawConnecting(5, 10);
-#ifdef double_buffer
-  display.showBuffer();
-#endif
+  // Setup ticker for driving display
+  display_ticker.attach(0.002, display_updater);
+  yield();
+  display.clearDisplay();
 
   // Setup EZ Time
   setDebug(INFO);
@@ -247,34 +183,25 @@ void setup() {
   Serial.print(F("Time in your set timezone:         "));
   Serial.println(myTZ.dateTime());
 
-#ifdef double_buffer
-  display.fillScreen(tetris.tetrisBLACK);
-#else
   display.clearDisplay();
-#endif
-  // "Powered By"
-  drawIntro(6, 12);
-#ifdef double_buffer
-  display.showBuffer();
-#endif
-  delay(2000);
+   //"Powered By"
+  //drawIntro(6, 12);
+  //delay(2000);
 
   // Start the Animation Timer
-  tetris.setText("TINY PICO");
-  animationTimer = timerBegin(1, 80, true);
-  timerAttachInterrupt(animationTimer, &animationHandler, true);
-  timerAlarmWrite(animationTimer, 100000, true);
-  timerAlarmEnable(animationTimer);
+  //tetris.setText("B. LOUGH");
+  //timer_ticker.attach(0.1, animationHandler);
 
   // Wait for the animation to finish
-  while (!finishedAnimating)
-  {
-    delay(10); //waiting for intro to finish
-  }
-  delay(2000);
+  //while (!finishedAnimating)
+  //{
+  //  delay(10); //waiting for intro to finish
+  //}
+  //delay(2000);
+  //timer_ticker.attach(0.1, setAnimateFlag);
   finishedAnimating = false;
   displayIntro = false;
-  tetris.scale = 2;
+  tetris.scale = 1;
 }
 
 void setMatrixTime() {
@@ -319,36 +246,28 @@ void setMatrixTime() {
     // to start again
     finishedAnimating = false;
   }
-}
-
-void handleColonAfterAnimation() {
-
-  // It will draw the colon every time, but when the colour is black it
-  // should look like its clearing it.
-  uint16_t colour =  showColon ? tetris.tetrisWHITE : tetris.tetrisBLACK;
-  // The x position that you draw the tetris animation object
-  int x = twelveHourFormat ? -6 : 2;
-  // The y position adjusted for where the blocks will fall from
-  // (this could be better!)
-  int y = 26 - (TETRIS_Y_DROP_DEFAULT * tetris.scale);
-  tetris.drawColon(x, y, colour);
+  timer_ticker.detach() ;
 }
 
 
 void loop() {
   unsigned long now = millis();
+//  if(false && animateFlag){
+//    animateFlag = false;
+//    animationHandler();
+//  }
+
+ // animationHandler();
   if (now > oneSecondLoopDue) {
     // We can call this often, but it will only
     // update when it needs to
     setMatrixTime();
     showColon = !showColon;
-
-    // To reduce flicker on the screen we stop clearing the screen
-    // when the animation is finished, but we still need the colon to
-    // to blink
-    if (finishedAnimating) {
-      handleColonAfterAnimation();
-    }
     oneSecondLoopDue = now + 1000;
+  }
+  if (now > animLoop)
+  {
+     animationHandler() ;
+     animLoop = now + 100 ;         // 0.1 second
   }
 }

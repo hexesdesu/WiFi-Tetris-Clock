@@ -44,21 +44,21 @@
 // ---- Stuff to configure ----
 
 // Initialize Wifi connection to the router
-char ssid[] = "SSID";     // your network SSID (name)
-char password[] = "password"; // your network key
+char ssid[] = "DynamicOP";     // your network SSID (name)
+char password[] = "DynamicOP"; // your network key
 
 // Set a timezone using the following list
 // https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-#define MYTIMEZONE "Europe/Dublin"
+#define MYTIMEZONE "Asia/Shanghai"
 
 // Sets whether the clock should be 12 hour format or not.
-bool twelveHourFormat = true;
+bool twelveHourFormat = false;
 
 // If this is set to false, the number will only change if the value behind it changes
 // e.g. the digit representing the least significant minute will be replaced every minute,
 // but the most significant number will only be replaced every 10 minutes.
 // When true, all digits will be replaced every minute.
-bool forceRefresh = true;
+bool forceRefresh = false;
 // -----------------------------
 
 // ----- Wiring -------
@@ -75,8 +75,8 @@ Ticker display_ticker;
 Ticker timer_ticker;
 
 // PxMATRIX display(32,16,P_LAT, P_OE,P_A,P_B,P_C);
-// PxMATRIX display(64,32,P_LAT, P_OE,P_A,P_B,P_C,P_D);
-PxMATRIX display(64, 32, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
+ PxMATRIX display(64,32,P_LAT, P_OE,P_A,P_B,P_C,P_D);
+//PxMATRIX display(64, 64, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
 
 TetrisMatrixDraw tetris(display); // Main clock
 TetrisMatrixDraw tetris2(display); // The "M" of AM/PM
@@ -92,10 +92,10 @@ bool animateFlag = false;
 
 String lastDisplayedTime = "";
 String lastDisplayedAmPm = "";
-
+unsigned long animLoop = 0;
 // This method is needed for driving the display
 void display_updater() {
-  display.display(70);
+  display.display(1);
 }
 
 void setAnimateFlag() {
@@ -215,19 +215,19 @@ void setup() {
 
   display.clearDisplay();
    //"Powered By"
-  drawIntro(6, 12);
-  delay(2000);
+  //drawIntro(6, 12);
+  //delay(2000);
 
   // Start the Animation Timer
-  tetris.setText("B. LOUGH");
-  timer_ticker.attach(0.1, animationHandler);
+  //tetris.setText("B. LOUGH");
+  //timer_ticker.attach(0.1, animationHandler);
 
   // Wait for the animation to finish
-  while (!finishedAnimating)
-  {
-    delay(10); //waiting for intro to finish
-  }
-  delay(2000);
+  //while (!finishedAnimating)
+  //{
+  //  delay(10); //waiting for intro to finish
+  //}
+  //delay(2000);
   //timer_ticker.attach(0.1, setAnimateFlag);
   finishedAnimating = false;
   displayIntro = false;
@@ -276,6 +276,7 @@ void setMatrixTime() {
     // to start again
     finishedAnimating = false;
   }
+  timer_ticker.detach() ;
 }
 
 
@@ -292,6 +293,11 @@ void loop() {
     // update when it needs to
     setMatrixTime();
     showColon = !showColon;
-    oneSecondLoopDue = now + 10000;
+    oneSecondLoopDue = now + 1000;
+  }
+  if (now > animLoop)
+  {
+     animationHandler() ;
+     animLoop = now + 100 ;         // 0.1 second
   }
 }
