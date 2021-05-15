@@ -1,7 +1,7 @@
 # WiFi-Tetris-Clock
 Based on https://github.com/witnessmenow/WiFi-Tetris-Clock
 
-only for p2.5 or p5 panel using esp8266
+only for p2.5 or p6.25 panel using esp8266
 
 ![img](https://thumbs.gfycat.com/RecklessSpecificKoodoo-size_restricted.gif)
 
