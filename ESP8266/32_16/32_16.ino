@@ -44,8 +44,8 @@
 // ---- Stuff to configure ----
 
 // Initialize Wifi connection to the router
-char ssid[] = "DynamicOP";     // your network SSID (name)
-char password[] = "DynamicOP"; // your network key
+char ssid[] = "<your-ssid>";     // your network SSID (name)
+char password[] = "<your-pwd>"; // your network key
 
 // Set a timezone using the following list
 // https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
